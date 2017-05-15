@@ -1,0 +1,15 @@
+<RelativeLayout android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    xmlns:android="http://schemas.android.com/apk/res/android" >
+    <TextView
+        android:layout_margin="10dp"
+        android:id="@+id/tv_toast"
+        android:text="210"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.1dp"
+        android:layout_below="@+id/tv_toast"
+        android:background="@color/colorGray"/>
+</RelativeLayout>

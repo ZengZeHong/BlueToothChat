@@ -30,6 +30,7 @@ public class RecyclerBlueToothAdapter extends RecyclerView.Adapter<RecyclerView.
     public void setOnItemClickListener(OnItemClickListener onItemClickListener){
         this.onItemClickListener = onItemClickListener;
     }
+
     public RecyclerBlueToothAdapter(Context context){
         this.context = context;
     }
@@ -53,7 +54,7 @@ public class RecyclerBlueToothAdapter extends RecyclerView.Adapter<RecyclerView.
     }
 
     @Override
-    public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
+    public void onBindViewHolder(RecyclerView.ViewHolder holder, final int position) {
         if(list.get(position).getTag() == BlueTooth.TAG_NORMAL) {
             BlueToothHolder blueToothHolder = (BlueToothHolder)holder;
             BlueTooth result = list.get(position);
@@ -63,7 +64,8 @@ public class RecyclerBlueToothAdapter extends RecyclerView.Adapter<RecyclerView.
             blueToothHolder.getRlClick().setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-
+                    if(onItemClickListener != null)
+                        onItemClickListener.onItemClick(position);
                 }
             });
         }else{
