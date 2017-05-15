@@ -1,8 +1,8 @@
 package com.rdc.zzh.bluetoothchat.activity;
 
+import android.app.ProgressDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.Handler;
@@ -22,6 +22,7 @@ import com.rdc.zzh.bluetoothchat.adapter.RecyclerBlueToothAdapter;
 import com.rdc.zzh.bluetoothchat.bean.BlueTooth;
 import com.rdc.zzh.bluetoothchat.database.SQLHelper;
 import com.rdc.zzh.bluetoothchat.receiver.BlueToothReceiver;
+import com.rdc.zzh.bluetoothchat.service.BluetoothChatService;
 import com.rdc.zzh.bluetoothchat.vinterface.BlueToothInterface;
 
 import java.util.ArrayList;
@@ -41,7 +42,10 @@ public class MainActivity extends AppCompatActivity  implements CompoundButton.O
     private SQLHelper sqlHelper;
     private List<BlueTooth> list = new ArrayList<>();
     private BlueToothReceiver mReceiver;
+    private ProgressDialog progressDialog;
     private SwipeRefreshLayout swipeRefreshLayout;
+
+    private BluetoothChatService mBluetoothChatService;
     private Handler handler = new Handler(){
         @Override
         public void handleMessage(Message msg) {
@@ -103,6 +107,9 @@ public class MainActivity extends AppCompatActivity  implements CompoundButton.O
 
         sqlHelper = new SQLHelper(MainActivity.this ,  "blue_tooth_db" ,null , 1);
 
+        //开启socket监听
+        mBluetoothChatService = new BluetoothChatService(handler);
+        mBluetoothChatService.start();
     }
 
     @Override
@@ -160,15 +167,45 @@ public class MainActivity extends AppCompatActivity  implements CompoundButton.O
      */
     @Override
     public void onItemClick(int position) {
-        Intent intent = new Intent(MainActivity.this , ChatActivity.class);
+        showProgressDialog("正在进行连接");
         BlueTooth blueTooth = list.get(position);
+
+        connectDevice(blueTooth.getMac());
+
+       /* Intent intent = new Intent(MainActivity.this , ChatActivity.class);
         intent.putExtra(ChatActivity.DEVICE_MAC_INTENT , blueTooth.getMac());
         intent.putExtra(ChatActivity.DEVICE_NAME_INTENT , blueTooth.getName());
         startActivity(intent);
         //关闭其他资源
-        close();
+        close();*/
     }
 
+    private void connectDevice(String mac) {
+        BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(mac);
+        mBluetoothChatService.connectDevice(device);
+    }
+
+    /**
+     * 进度对话框
+     * @param msg
+     */
+    public void showProgressDialog(String msg) {
+        if (progressDialog == null)
+            progressDialog = new ProgressDialog(this);
+        progressDialog.setMessage(msg);
+        progressDialog.setCancelable(true);
+        progressDialog.setIndeterminate(false);
+        progressDialog.show();
+    }
+
+    /**
+     * 关闭进度对话框
+     */
+    public void dismissProgressDialog() {
+        if (progressDialog != null && progressDialog.isShowing()) {
+            progressDialog.dismiss();
+        }
+    }
 
     private class WifiTask extends TimerTask {
         private boolean isChecked;
