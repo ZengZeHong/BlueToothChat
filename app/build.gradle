@@ -3,6 +3,11 @@ apply plugin: 'com.android.application'
 android {
     compileSdkVersion 23
     buildToolsVersion "25.0.0"
+
+    aaptOptions {
+        cruncherEnabled = false
+        useNewCruncher = false
+     }
     defaultConfig {
         applicationId "com.rdc.zzh.bluetoothchat"
         minSdkVersion 15

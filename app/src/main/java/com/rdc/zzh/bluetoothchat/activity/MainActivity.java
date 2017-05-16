@@ -3,6 +3,7 @@ package com.rdc.zzh.bluetoothchat.activity;
 import android.app.ProgressDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.Handler;
@@ -15,14 +16,13 @@ import android.util.Log;
 import android.view.View;
 import android.widget.CompoundButton;
 import android.widget.Switch;
-import android.widget.Toast;
 
 import com.rdc.zzh.bluetoothchat.R;
 import com.rdc.zzh.bluetoothchat.adapter.RecyclerBlueToothAdapter;
 import com.rdc.zzh.bluetoothchat.bean.BlueTooth;
-import com.rdc.zzh.bluetoothchat.database.SQLHelper;
 import com.rdc.zzh.bluetoothchat.receiver.BlueToothReceiver;
 import com.rdc.zzh.bluetoothchat.service.BluetoothChatService;
+import com.rdc.zzh.bluetoothchat.util.ToastUtil;
 import com.rdc.zzh.bluetoothchat.vinterface.BlueToothInterface;
 
 import java.util.ArrayList;
@@ -33,13 +33,18 @@ import java.util.TimerTask;
 
 public class MainActivity extends AppCompatActivity  implements CompoundButton.OnCheckedChangeListener , BlueToothInterface , RecyclerBlueToothAdapter.OnItemClickListener{
     private static final String TAG = "MainActivity";
+    public static final int BLUE_TOOTH_DIALOG = 0x111;
+    public static final int BLUE_TOOTH_TOAST = 0x123;
+    public static final int BLUE_TOOTH_WRAITE = 0X222;
+    public static final int BLUE_TOOTH_READ = 0X333;
+    public static final int BLUE_TOOTH_SUCCESS = 0x444;
+
     private RecyclerView recyclerView;
     private Switch st;
     private BluetoothAdapter mBluetoothAdapter;
     private Timer timer;
     private WifiTask task;
     private RecyclerBlueToothAdapter recyclerAdapter;
-    private SQLHelper sqlHelper;
     private List<BlueTooth> list = new ArrayList<>();
     private BlueToothReceiver mReceiver;
     private ProgressDialog progressDialog;
@@ -50,26 +55,53 @@ public class MainActivity extends AppCompatActivity  implements CompoundButton.O
         @Override
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
-            if(msg.what == BluetoothAdapter.STATE_ON){
-                st.setText("蓝牙已开启");
-                Log.e(TAG, "onCheckedChanged: startIntent" );
-               //自动刷新
-                swipeRefreshLayout.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        swipeRefreshLayout.setRefreshing(true);
-                        onRefreshListener.onRefresh();
+            switch (msg.what) {
+                case BluetoothAdapter.STATE_ON:
+                case BluetoothAdapter.STATE_OFF: {
+                    if (msg.what == BluetoothAdapter.STATE_ON) {
+                        st.setText("蓝牙已开启");
+                        Log.e(TAG, "onCheckedChanged: startIntent");
+                        //自动刷新
+                        swipeRefreshLayout.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                swipeRefreshLayout.setRefreshing(true);
+                                onRefreshListener.onRefresh();
+                            }
+                        }, 300);
+                        //开启socket监听
+                        mBluetoothChatService = BluetoothChatService.getInstance(handler);
+                        mBluetoothChatService.start();
+                    } else if (msg.what == BluetoothAdapter.STATE_OFF) {
+                        st.setText("蓝牙已关闭");
+                        recyclerAdapter.setWifiData(null);
+                        recyclerAdapter.notifyDataSetChanged();
+                        mBluetoothChatService.stop();
                     }
-                }, 300);
-            }else if(msg.what == BluetoothAdapter.STATE_OFF){
-                st.setText("蓝牙已关闭");
-                recyclerAdapter.setWifiData(null);
-                recyclerAdapter.notifyDataSetChanged();
+                    timer.cancel();
+                    timer = null;
+                    task = null;
+                    st.setClickable(true);
+                }
+                break;
+            case BLUE_TOOTH_DIALOG:{
+                showProgressDialog((String) msg.obj);
+            }break;
+            case BLUE_TOOTH_TOAST:{
+                dismissProgressDialog();
+                ToastUtil.showText(MainActivity.this, (String) msg.obj);
+            }break;
+            case BLUE_TOOTH_SUCCESS:{
+                dismissProgressDialog();
+                ToastUtil.showText(MainActivity.this , "连接设备" + (String)msg.obj + "成功");
+                Intent intent = new Intent(MainActivity.this , ChatActivity.class);
+                intent.putExtra(ChatActivity.DEVICE_NAME_INTENT , (String) msg.obj);
+                startActivity(intent);
+                //关闭其他资源
+                close();
+
+            }break;
             }
-            timer.cancel();
-            timer = null;
-            task = null;
-            st.setClickable(true);
         }
     };
 
@@ -105,11 +137,6 @@ public class MainActivity extends AppCompatActivity  implements CompoundButton.O
             st.setText("蓝牙已关闭");
         }
 
-        sqlHelper = new SQLHelper(MainActivity.this ,  "blue_tooth_db" ,null , 1);
-
-        //开启socket监听
-        mBluetoothChatService = new BluetoothChatService(handler);
-        mBluetoothChatService.start();
     }
 
     @Override
@@ -121,6 +148,13 @@ public class MainActivity extends AppCompatActivity  implements CompoundButton.O
         registerReceiver(mReceiver, filter); // Don't forget to unregister during onDestroy
         filter = new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
         registerReceiver(mReceiver, filter);
+
+        if(mBluetoothAdapter.isEnabled())
+        {
+            Log.e(TAG, "onResume: resumeStart" );
+            mBluetoothChatService = BluetoothChatService.getInstance(handler);
+            mBluetoothChatService.start();
+        }
     }
 
     @Override
@@ -129,13 +163,13 @@ public class MainActivity extends AppCompatActivity  implements CompoundButton.O
             if (mBluetoothAdapter.getState() != BluetoothAdapter.STATE_ON) {
                 mBluetoothAdapter.enable();  //打开蓝牙
                 st.setText("正在开启蓝牙");
-                Toast.makeText(this, "正在开启蓝牙", Toast.LENGTH_SHORT).show();
+                ToastUtil.showText(this, "正在开启蓝牙");
             }
         }else {
             if (mBluetoothAdapter.getState() != BluetoothAdapter.STATE_OFF) {
                 mBluetoothAdapter.disable();  //打开蓝牙
                 st.setText("正在关闭Wifi");
-                Toast.makeText(this, "正在关闭蓝牙", Toast.LENGTH_SHORT).show();
+                ToastUtil.showText(this, "正在关闭蓝牙");
             }
         }
         st.setClickable(false);
@@ -151,6 +185,7 @@ public class MainActivity extends AppCompatActivity  implements CompoundButton.O
     protected void onDestroy() {
         super.onDestroy();
         close();
+        mBluetoothChatService.stop();
     }
 
     private void close(){
@@ -169,15 +204,7 @@ public class MainActivity extends AppCompatActivity  implements CompoundButton.O
     public void onItemClick(int position) {
         showProgressDialog("正在进行连接");
         BlueTooth blueTooth = list.get(position);
-
         connectDevice(blueTooth.getMac());
-
-       /* Intent intent = new Intent(MainActivity.this , ChatActivity.class);
-        intent.putExtra(ChatActivity.DEVICE_MAC_INTENT , blueTooth.getMac());
-        intent.putExtra(ChatActivity.DEVICE_NAME_INTENT , blueTooth.getName());
-        startActivity(intent);
-        //关闭其他资源
-        close();*/
     }
 
     private void connectDevice(String mac) {
@@ -242,16 +269,16 @@ public class MainActivity extends AppCompatActivity  implements CompoundButton.O
                     }
                     list.add(new BlueTooth("已扫描的设备" , BlueTooth.TAG_TOAST));
                 } else {
-                    Toast.makeText(getApplicationContext(), "没有找到已匹对的设备！", Toast.LENGTH_SHORT).show();
+                    ToastUtil.showText(getApplicationContext(), "没有找到已匹对的设备！");
                     list.add(new BlueTooth("已扫描的设备" , BlueTooth.TAG_TOAST));
                 }
                 recyclerAdapter.notifyDataSetChanged();
                 //开始扫描设备
                 mBluetoothAdapter.startDiscovery();
-                Toast.makeText(MainActivity.this, "开始扫描设备", Toast.LENGTH_SHORT).show();
+                ToastUtil.showText(MainActivity.this, "开始扫描设备");
             }else{
                 swipeRefreshLayout.setRefreshing(false);
-                Toast.makeText(MainActivity.this, "请开启蓝牙", Toast.LENGTH_SHORT).show();
+                ToastUtil.showText(MainActivity.this, "请开启蓝牙");
             }
         }
     };
@@ -302,6 +329,6 @@ public class MainActivity extends AppCompatActivity  implements CompoundButton.O
     @Override
     public void searchFinish() {
         swipeRefreshLayout.setRefreshing(false);
-        Toast.makeText(MainActivity.this , "扫描完成" , Toast.LENGTH_SHORT).show();
+        ToastUtil.showText(MainActivity.this , "扫描完成" );
     }
 }
