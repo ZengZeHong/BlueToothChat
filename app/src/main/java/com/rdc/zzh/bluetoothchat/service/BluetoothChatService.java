@@ -22,9 +22,9 @@ import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
 import android.os.Handler;
 import android.os.Message;
-import android.util.Log;
 
 import com.rdc.zzh.bluetoothchat.activity.MainActivity;
+import com.rdc.zzh.bluetoothchat.util.Log;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,17 +34,12 @@ import java.util.UUID;
 public class BluetoothChatService {
     // Debugging
     private static final String TAG = "BluetoothChatService";
-    private static final boolean D = true;
 
     // Name for the SDP record when creating server socket
     private static final String NAME_SECURE = "BluetoothChatSecure";
-    private static final String NAME_INSECURE = "BluetoothChatInsecure";
 
-    // Unique UUID for this application
     private static final UUID MY_UUID_SECURE =
         UUID.fromString("fa87c0d0-afac-11de-8a39-0800200c9a66");
-    private static final UUID MY_UUID_INSECURE =
-        UUID.fromString("8ce255c0-200a-11e0-ac64-0800200c9a66");
     private int mState;
     // 显示当前连接状态
     public static final int STATE_NONE = 0;       // 什么都不做
@@ -90,7 +85,7 @@ public class BluetoothChatService {
         setState(STATE_LISTEN);
 
         if(mAcceptThread == null){
-            mAcceptThread = new AcceptThread(true);
+            mAcceptThread = new AcceptThread();
             mAcceptThread.start();
         }
     }
@@ -99,7 +94,7 @@ public class BluetoothChatService {
      * Stop all threads
      */
     public synchronized void stop() {
-        if (D) Log.e(TAG, "stop");
+        Log.e(TAG, "stop");
 
         if (mConnectThread != null) {
             mConnectThread.cancel();
@@ -147,17 +142,11 @@ public class BluetoothChatService {
     //连接等待线程
     class AcceptThread extends Thread{
         private final BluetoothServerSocket serverSocket;
-        private String mSocketType;
-        public AcceptThread(boolean isSecure){
+        public AcceptThread(){
             //获取服务器监听端口
             BluetoothServerSocket tmp = null;
-            mSocketType = isSecure ? "Secure" : "Insecire";
             try {
-                if (isSecure) {
                     tmp = bluetoothAdapter.listenUsingRfcommWithServiceRecord(NAME_SECURE, MY_UUID_SECURE);
-                } else {
-                    tmp = bluetoothAdapter.listenUsingInsecureRfcommWithServiceRecord(NAME_INSECURE, MY_UUID_INSECURE);
-                }
             }   catch (IOException e) {
                 e.printStackTrace();
             }
@@ -167,7 +156,6 @@ public class BluetoothChatService {
         public void run() {
             super.run();
             //监听端口
-            Log.d(TAG, "Socket Type: " + mSocketType);
             BluetoothSocket socket = null;
             while(mState != STATE_TRANSFER) {
                 try {
@@ -187,8 +175,7 @@ public class BluetoothChatService {
                                 //传输数据，服务器端调用
                                 Log.e(TAG, "run: 服务器AcceptThread传输" );
                                 sendMessageToUi(MainActivity.BLUE_TOOTH_DIALOG , "正在与" + socket.getRemoteDevice().getName() + "连接");
-                                dataTransfer(socket, socket.getRemoteDevice(),
-                                        mSocketType);
+                                dataTransfer(socket, socket.getRemoteDevice());
                                 break;
                             case STATE_NONE:
                             case STATE_TRANSFER:
@@ -196,7 +183,7 @@ public class BluetoothChatService {
                                 try {
                                     socket.close();
                                 } catch (IOException e) {
-                                    Log.e(TAG, "Could not close unwanted socket", e);
+                                    Log.e(TAG, "Could not close unwanted socket" + e);
                                 }
                                 break;
                         }
@@ -228,9 +215,8 @@ public class BluetoothChatService {
      * 开始连接通讯
      * @param socket
      * @param remoteDevice 远程设备
-     * @param socketType
      */
-    private void dataTransfer(BluetoothSocket socket,final BluetoothDevice remoteDevice, String socketType) {
+    private void dataTransfer(BluetoothSocket socket,final BluetoothDevice remoteDevice) {
         //关闭连接线程，这里只能连接一个远程设备
         if (mAcceptThread != null) {
             mAcceptThread.cancel();
@@ -238,7 +224,7 @@ public class BluetoothChatService {
         }
 
         // 启动管理连接线程和开启传输
-        mTransferThread = new TransferThread(socket, remoteDevice.getName());
+        mTransferThread = new TransferThread(socket);
         mTransferThread.start();
         //标志状态为连接
         setState(STATE_TRANSFER);
@@ -271,10 +257,7 @@ public class BluetoothChatService {
         private final BluetoothSocket socket;
         private final OutputStream out;
         private final InputStream in;
-        private final String deviceName;
-        public TransferThread(BluetoothSocket mBluetoothSocket , String deviceName){
-                Log.e(TAG, "TransferThread: socketType " + deviceName );
-                this.deviceName = deviceName;
+        public TransferThread(BluetoothSocket mBluetoothSocket){
                 socket = mBluetoothSocket;
                 OutputStream mOutputStream = null;
                 InputStream mInputStream = null;
@@ -327,7 +310,7 @@ public class BluetoothChatService {
                 uiHandler.obtainMessage(MainActivity.BLUE_TOOTH_WRAITE , -1, -1, buffer)
                         .sendToTarget();
             } catch (IOException e) {
-                Log.e(TAG, "Exception during write", e);
+                Log.e(TAG, "Exception during write " + e);
             }
         }
 
@@ -336,7 +319,7 @@ public class BluetoothChatService {
                 if(socket != null)
                     socket.close();
             } catch (IOException e) {
-                Log.e(TAG, "close() of connect socket failed", e);
+                Log.e(TAG, "close() of connect socket failed" + e);
             }
         }
     }
@@ -388,7 +371,7 @@ public class BluetoothChatService {
             }
             //Socket已经连接上了，默认安全,客户端才会调用
             Log.e(TAG, "run: connectThread 连接上了,准备传输");
-            dataTransfer(socket, device, "secure");
+            dataTransfer(socket, device);
         }
 
         public void cancel(){
